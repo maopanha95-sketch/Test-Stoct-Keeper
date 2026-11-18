@@ -70,47 +70,23 @@
   </table>
 </div>
 
-<!-- ភ្ជាប់ Firebase SDK -->
-<script type="module">
-  import { initializeApp } from "https://gstatic.com";
-  import { getDatabase, ref, push, set, update, remove, onValue } from "https://gstatic.com";
-
-  // ជំនួសព័ត៌មាន Firebase របស់អ្នកនៅទីនេះ
-  const firebaseConfig = {
-  apiKey: "AIzaSyAAwxBmw8YkByD_bDDg5WH7LZfzpJR79mM",
-  authDomain: "planning-with-ai-25240.firebaseapp.com",
-  projectId: "planning-with-ai-25240",
-  storageBucket: "planning-with-ai-25240.firebasestorage.app",
-  messagingSenderId: "560211547563",
-  appId: "1:560211547563:web:3dfdecb4280ea736276eee"
-};
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const stockRef = ref(db, 'stocks');
-  let stockList = {};
-
-  // ទាញទិន្នន័យ Real-time ពី Cloud
-  onValue(stockRef, (snapshot) => {
-    stockList = snapshot.val() || {};
-    window.renderTable();
-  });
-
-  // មុខងារ Login (អ្នកអាចប្តូរឈ្មោះ និងលេខសម្ងាត់នៅទីនេះ)
-  window.login = function() {
-    const u = document.getElementById('username').value;
-    const p = document.getElementById('password').value;
+<!-- ១. មុខងារ Login ដាច់ដោយឡែក -->
+<script>
+  function login() {
+    const u = document.getElementById('username').value.trim();
+    const p = document.getElementById('password').value.trim();
     if (u === 'admin' && p === '1234') {
       sessionStorage.setItem('isLoggedIn', 'true');
       checkAuth();
     } else {
       alert("ឈ្មោះអ្នកប្រើ ឬលេខសម្ងាត់មិនត្រឹមត្រូវ!");
     }
-  };
+  }
 
-  window.logout = function() {
+  function logout() {
     sessionStorage.removeItem('isLoggedIn');
     checkAuth();
-  };
+  }
 
   function checkAuth() {
     if (sessionStorage.getItem('isLoggedIn') === 'true') {
@@ -122,89 +98,114 @@
     }
   }
   checkAuth();
+</script>
 
-  // បន្ថែមទំនិញទៅ Cloud
-  window.addItem = function() {
-    const code = document.getElementById('itemCode').value.trim();
-    const name = document.getElementById('itemName').value.trim();
-    const qty = parseInt(document.getElementById('itemQty').value);
-    const price = parseFloat(document.getElementById('itemPrice').value);
+<!-- ២. ភ្ជាប់ Firebase SDK ជាមួយ Config របស់អ្នក -->
+<script type="module">
+  import { initializeApp } from "https://gstatic.com";
+  import { getDatabase, ref, push, set, update, remove, onValue } from "https://gstatic.com";
 
-    if (!code || !name || isNaN(qty) || isNaN(price)) {
-      alert("សូមបំពេញព័ត៌មានឱ្យបានគ្រប់គ្រាន់!");
-      return;
-    }
-
-    const newItemRef = push(stockRef);
-    set(newItemRef, { code, name, qty, price });
-
-    document.getElementById('itemCode').value = '';
-    document.getElementById('itemName').value = '';
-    document.getElementById('itemQty').value = '';
-    document.getElementById('itemPrice').value = '';
+  const firebaseConfig = {
+    apiKey: "AIzaSyAAwxBmw8YkByD_bDDg5WH7LZfzpJR79mM",
+    authDomain: "planning-with-ai-25240.firebaseapp.com",
+    databaseURL: "https://firebaseio.com",
+    projectId: "planning-with-ai-25240",
+    storageBucket: "planning-with-ai-25240.firebasestorage.app",
+    messagingSenderId: "560211547563",
+    appId: "1:560211547563:web:3dfdecb4280ea736276eee"
   };
 
-  // កែប្រែចំនួនស្តុក
-  window.updateQty = function(id, change) {
-    const currentQty = stockList[id].qty;
-    if (currentQty + change < 0) {
-      alert("ចំនួនក្នុងស្តុកមិនគ្រប់គ្រាន់ទេ!");
-      return;
-    }
-    update(ref(db, 'stocks/' + id), { qty: currentQty + change });
-  };
+  try {
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const stockRef = ref(db, 'stocks');
+    let stockList = {};
 
-  // លុបទំនិញ
-  window.deleteItem = function(id) {
-    if (confirm("តើអ្នកពិតជាចង់លុបទំនិញនេះមែនទេ?")) {
-      remove(ref(db, 'stocks/' + id));
-    }
-  };
+    onValue(stockRef, (snapshot) => {
+      stockList = snapshot.val() || {};
+      window.renderTable();
+    });
 
-  // បង្ហាញតារាង
-  window.renderTable = function() {
-    const search = document.getElementById('searchInput').value.toLowerCase();
-    const tbody = document.getElementById('stockTable');
-    tbody.innerHTML = '';
+    window.addItem = function() {
+      const code = document.getElementById('itemCode').value.trim();
+      const name = document.getElementById('itemName').value.trim();
+      const qty = parseInt(document.getElementById('itemQty').value);
+      const price = parseFloat(document.getElementById('itemPrice').value);
 
-    Object.keys(stockList).forEach((id) => {
-      const item = stockList[id];
-      if (item.code.toLowerCase().includes(search) || item.name.toLowerCase().includes(search)) {
-        const total = (item.qty * item.price).toFixed(2);
-        const lowClass = item.qty <= 5 ? 'low-stock' : '';
-        tbody.innerHTML += `
-          <tr>
-            <td>${item.code}</td>
-            <td>${item.name}</td>
-            <td class="${lowClass}">${item.qty}</td>
-            <td>$${item.price.toFixed(2)}</td>
-            <td>$${total}</td>
-            <td>
-              <button class="btn-in" onclick="updateQty('${id}', 1)">+1</button>
-              <button class="btn-out" onclick="updateQty('${id}', -1)">-1</button>
-              <button class="btn-del" onclick="deleteItem('${id}')">លុប</button>
-            </td>
-          </tr>
-        `;
+      if (!code || !name || isNaN(qty) || isNaN(price)) {
+        alert("សូមបំពេញព័ត៌មានឱ្យបានគ្រប់គ្រាន់!");
+        return;
       }
-    });
-  };
 
-  // នាំចេញជាឯកសារ Excel (CSV)
-  window.exportToExcel = function() {
-    let csv = "\uFEFFកូដទំនិញ,ឈ្មោះទំនិញ,ចំនួនក្នុងស្តុក,តម្លៃរាយ ($),តម្លៃសរុប ($)\n";
-    Object.keys(stockList).forEach((id) => {
-      const item = stockList[id];
-      const total = (item.qty * item.price).toFixed(2);
-      csv += `"${item.code}","${item.name}",${item.qty},${item.price.toFixed(2)},${total}\n`;
-    });
+      const newItemRef = push(stockRef);
+      set(newItemRef, { code, name, qty, price });
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "Stock_Report.csv";
-    link.click();
-  };
+      document.getElementById('itemCode').value = '';
+      document.getElementById('itemName').value = '';
+      document.getElementById('itemQty').value = '';
+      document.getElementById('itemPrice').value = '';
+    };
+
+    window.updateQty = function(id, change) {
+      const currentQty = stockList[id].qty;
+      if (currentQty + change < 0) {
+        alert("ចំនួនក្នុងស្តុកមិនគ្រប់គ្រាន់ទេ!");
+        return;
+      }
+      update(ref(db, 'stocks/' + id), { qty: currentQty + change });
+    };
+
+    window.deleteItem = function(id) {
+      if (confirm("តើអ្នកពិតជាចង់លុបទំនិញនេះមែនទេ?")) {
+        remove(ref(db, 'stocks/' + id));
+      }
+    };
+
+    window.renderTable = function() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const tbody = document.getElementById('stockTable');
+      tbody.innerHTML = '';
+
+      Object.keys(stockList).forEach((id) => {
+        const item = stockList[id];
+        if (item.code.toLowerCase().includes(search) || item.name.toLowerCase().includes(search)) {
+          const total = (item.qty * item.price).toFixed(2);
+          const lowClass = item.qty <= 5 ? 'low-stock' : '';
+          tbody.innerHTML += `
+            <tr>
+              <td>${item.code}</td>
+              <td>${item.name}</td>
+              <td class="${lowClass}">${item.qty}</td>
+              <td>$${item.price.toFixed(2)}</td>
+              <td>$${total}</td>
+              <td>
+                <button class="btn-in" onclick="updateQty('${id}', 1)">+1</button>
+                <button class="btn-out" onclick="updateQty('${id}', -1)">-1</button>
+                <button class="btn-del" onclick="deleteItem('${id}')">លុប</button>
+              </td>
+            </tr>
+          `;
+        }
+      });
+    };
+
+    window.exportToExcel = function() {
+      let csv = "\uFEFFកូដទំនិញ,ឈ្មោះទំនិញ,ចំនួនក្នុងស្តុក,តម្លៃរាយ ($),តម្លៃសរុប ($)\n";
+      Object.keys(stockList).forEach((id) => {
+        const item = stockList[id];
+        const total = (item.qty * item.price).toFixed(2);
+        csv += `"${item.code}","${item.name}",${item.qty},${item.price.toFixed(2)},${total}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "Stock_Report.csv";
+      link.click();
+    };
+  } catch (error) {
+    alert("កំហុសការភ្ជាប់ Firebase៖ " + error.message);
+  }
 </script>
 
 </body>
