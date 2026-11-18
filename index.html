@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ប្រព័ន្ធគ្រប់គ្រងស្តុក Cloud (Stock Keeper Pro)</title>
+  <style>
+    body { font-family: 'Khmer OS Battambang', Arial, sans-serif; background: #eef2f5; margin: 0; padding: 20px; color: #333; }
+    .box { max-width: 950px; margin: auto; background: #fff; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .login-box { max-width: 380px; margin: 80px auto; text-align: center; }
+    h1, h2 { color: #2c3e50; margin-bottom: 20px; }
+    .form-group { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+    input, button { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 15px; font-family: inherit; }
+    input { flex: 1; min-width: 140px; }
+    button { background: #27ae60; color: white; border: none; cursor: pointer; font-weight: bold; }
+    button:hover { opacity: 0.9; }
+    .btn-excel { background: #16a085; }
+    .btn-logout { background: #7f8c8d; float: right; }
+    .btn-in { background: #2980b9; padding: 5px 10px; margin: 0 2px; }
+    .btn-out { background: #e67e22; padding: 5px 10px; margin: 0 2px; }
+    .btn-del { background: #c0392b; padding: 5px 10px; margin: 0 2px; }
+    .toolbar { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+    th { background: #2c3e50; color: white; }
+    .low-stock { color: #c0392b; font-weight: bold; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ផ្ទាំង Login -->
+<div id="loginSection" class="box login-box">
+  <h2>🔐 ចូលប្រើប្រព័ន្ធស្តុក</h2>
+  <input type="text" id="username" placeholder="ឈ្មោះអ្នកប្រើ (admin)" style="width: 90%; margin-bottom: 10px;"><br>
+  <input type="password" id="password" placeholder="លេខសម្ងាត់ (1234)" style="width: 90%; margin-bottom: 15px;"><br>
+  <button onclick="login()" style="width: 96%;">ចូលប្រើប្រាស់</button>
+</div>
+
+<!-- ផ្ទាំងគ្រប់គ្រងស្តុក -->
+<div id="appSection" class="box hidden">
+  <button class="btn-logout" onclick="logout()">ចាកចេញ</button>
+  <h1>☁️ ប្រព័ន្ធគ្រប់គ្រងស្តុក Cloud</h1>
+  
+  <div class="form-group">
+    <input type="text" id="itemCode" placeholder="កូដទំនិញ (ឧ. P001)">
+    <input type="text" id="itemName" placeholder="ឈ្មោះទំនិញ">
+    <input type="number" id="itemQty" placeholder="ចំនួន" min="0">
+    <input type="number" id="itemPrice" placeholder="តម្លៃ ($)" min="0" step="0.01">
+    <button onclick="addItem()">+ បន្ថែមទំនិញ</button>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="searchInput" onkeyup="renderTable()" placeholder="🔍 ស្វែងរកតាមកូដ ឬឈ្មោះទំនិញ...">
+    <button class="btn-excel" onclick="exportToExcel()">📥 ទាញយកជា Excel</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>កូដ</th>
+        <th>ឈ្មោះទំនិញ</th>
+        <th>ចំនួនក្នុងស្តុក</th>
+        <th>តម្លៃរាយ ($)</th>
+        <th>តម្លៃសរុប ($)</th>
+        <th>គ្រប់គ្រងស្តុក</th>
+      </tr>
+    </thead>
+    <tbody id="stockTable"></tbody>
+  </table>
+</div>
+
+<!-- ភ្ជាប់ Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://gstatic.com";
+  import { getDatabase, ref, push, set, update, remove, onValue } from "https://gstatic.com";
+
+  // ជំនួសព័ត៌មាន Firebase របស់អ្នកនៅទីនេះ
+  const firebaseConfig = {
+  apiKey: "AIzaSyAAwxBmw8YkByD_bDDg5WH7LZfzpJR79mM",
+  authDomain: "planning-with-ai-25240.firebaseapp.com",
+  projectId: "planning-with-ai-25240",
+  storageBucket: "planning-with-ai-25240.firebasestorage.app",
+  messagingSenderId: "560211547563",
+  appId: "1:560211547563:web:3dfdecb4280ea736276eee"
+};
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const stockRef = ref(db, 'stocks');
+  let stockList = {};
+
+  // ទាញទិន្នន័យ Real-time ពី Cloud
+  onValue(stockRef, (snapshot) => {
+    stockList = snapshot.val() || {};
+    window.renderTable();
+  });
+
+  // មុខងារ Login (អ្នកអាចប្តូរឈ្មោះ និងលេខសម្ងាត់នៅទីនេះ)
+  window.login = function() {
+    const u = document.getElementById('username').value;
+    const p = document.getElementById('password').value;
+    if (u === 'admin' && p === '1234') {
+      sessionStorage.setItem('isLoggedIn', 'true');
+      checkAuth();
+    } else {
+      alert("ឈ្មោះអ្នកប្រើ ឬលេខសម្ងាត់មិនត្រឹមត្រូវ!");
+    }
+  };
+
+  window.logout = function() {
+    sessionStorage.removeItem('isLoggedIn');
+    checkAuth();
+  };
+
+  function checkAuth() {
+    if (sessionStorage.getItem('isLoggedIn') === 'true') {
+      document.getElementById('loginSection').classList.add('hidden');
+      document.getElementById('appSection').classList.remove('hidden');
+    } else {
+      document.getElementById('loginSection').classList.remove('hidden');
+      document.getElementById('appSection').classList.add('hidden');
+    }
+  }
+  checkAuth();
+
+  // បន្ថែមទំនិញទៅ Cloud
+  window.addItem = function() {
+    const code = document.getElementById('itemCode').value.trim();
+    const name = document.getElementById('itemName').value.trim();
+    const qty = parseInt(document.getElementById('itemQty').value);
+    const price = parseFloat(document.getElementById('itemPrice').value);
+
+    if (!code || !name || isNaN(qty) || isNaN(price)) {
+      alert("សូមបំពេញព័ត៌មានឱ្យបានគ្រប់គ្រាន់!");
+      return;
+    }
+
+    const newItemRef = push(stockRef);
+    set(newItemRef, { code, name, qty, price });
+
+    document.getElementById('itemCode').value = '';
+    document.getElementById('itemName').value = '';
+    document.getElementById('itemQty').value = '';
+    document.getElementById('itemPrice').value = '';
+  };
+
+  // កែប្រែចំនួនស្តុក
+  window.updateQty = function(id, change) {
+    const currentQty = stockList[id].qty;
+    if (currentQty + change < 0) {
+      alert("ចំនួនក្នុងស្តុកមិនគ្រប់គ្រាន់ទេ!");
+      return;
+    }
+    update(ref(db, 'stocks/' + id), { qty: currentQty + change });
+  };
+
+  // លុបទំនិញ
+  window.deleteItem = function(id) {
+    if (confirm("តើអ្នកពិតជាចង់លុបទំនិញនេះមែនទេ?")) {
+      remove(ref(db, 'stocks/' + id));
+    }
+  };
+
+  // បង្ហាញតារាង
+  window.renderTable = function() {
+    const search = document.getElementById('searchInput').value.toLowerCase();
+    const tbody = document.getElementById('stockTable');
+    tbody.innerHTML = '';
+
+    Object.keys(stockList).forEach((id) => {
+      const item = stockList[id];
+      if (item.code.toLowerCase().includes(search) || item.name.toLowerCase().includes(search)) {
+        const total = (item.qty * item.price).toFixed(2);
+        const lowClass = item.qty <= 5 ? 'low-stock' : '';
+        tbody.innerHTML += `
+          <tr>
+            <td>${item.code}</td>
+            <td>${item.name}</td>
+            <td class="${lowClass}">${item.qty}</td>
+            <td>$${item.price.toFixed(2)}</td>
+            <td>$${total}</td>
+            <td>
+              <button class="btn-in" onclick="updateQty('${id}', 1)">+1</button>
+              <button class="btn-out" onclick="updateQty('${id}', -1)">-1</button>
+              <button class="btn-del" onclick="deleteItem('${id}')">លុប</button>
+            </td>
+          </tr>
+        `;
+      }
+    });
+  };
+
+  // នាំចេញជាឯកសារ Excel (CSV)
+  window.exportToExcel = function() {
+    let csv = "\uFEFFកូដទំនិញ,ឈ្មោះទំនិញ,ចំនួនក្នុងស្តុក,តម្លៃរាយ ($),តម្លៃសរុប ($)\n";
+    Object.keys(stockList).forEach((id) => {
+      const item = stockList[id];
+      const total = (item.qty * item.price).toFixed(2);
+      csv += `"${item.code}","${item.name}",${item.qty},${item.price.toFixed(2)},${total}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "Stock_Report.csv";
+    link.click();
+  };
+</script>
+
+</body>
+</html>
